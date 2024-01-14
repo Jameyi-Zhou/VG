@@ -11,6 +11,8 @@ venv/
 *.pkl
 *.zip
 *.bin
+*.sh
+figures
 outputs
 saved_models
 ln_data

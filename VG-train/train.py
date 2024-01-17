@@ -216,10 +216,8 @@ def main(args):
         checkpoint = torch.load(args.resume, map_location='cpu')
         model_without_ddp.load_state_dict(checkpoint['model'])
         if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-            # optimizer.load_state_dict(checkpoint['optimizer'])
-            # lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-            optimizer = torch.optim.AdamW(param_list, lr=args.lr, weight_decay=args.weight_decay)
-            lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             args.start_epoch = checkpoint['epoch'] + 1
     # elif args.detr_model is not None:
     #     checkpoint = torch.load(args.detr_model, map_location='cpu')  # checkpoint有decoder的权重

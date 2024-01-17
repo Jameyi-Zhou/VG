@@ -88,22 +88,41 @@ class Attention(nn.Module):
         mask = [cls_mask, v_mask0, v_mask1, v_mask2]
         '''
 
-        B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv.unbind(0)
-        q, k = self.q_norm(q), self.k_norm(k)
-        
-        q = q * self.scale
-        attn = q @ k.transpose(-2, -1)
-        
-        attn_mask = x_mask.unsqueeze(1).expand(-1, N, -1)
-        attn = attn.masked_fill(attn_mask.unsqueeze(1), float('-inf'))
-        attn = attn.softmax(dim=-1)
-        attn = attn.masked_fill(attn_mask.transpose(1, 2).unsqueeze(1), 0)
-        attn = self.attn_drop(attn)
-        x = attn @ v
+        B, N_i, C = x.shape
+        _, N_t, _ = t.shape
+        qkv = self.qkv(x).reshape(B, N_i, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+        q_i, k_i, v_i = qkv.unbind(0)
+        q_i, k_i = self.q_norm(q_i), self.k_norm(k_i)
 
-        x = x.transpose(1, 2).reshape(B, N, C)
+        q_t = k_t = t.reshape(B, N_t, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        q_i = q_i * self.scale
+        q_t = q_t * self.scale
+        attn_i2t = q_i @ k_t.transpose(-2, -1)
+        attn_t2i = q_t @ k_i.transpose(-2, -1)
+        
+        attn_i2t_mask = t_mask.unsqueeze(1).expand(-1, N_i, -1)
+        attn_i2t = attn_i2t.masked_fill(attn_i2t_mask.unsqueeze(1), float('-inf'))
+        attn_i2t = attn_i2t.softmax(dim=-1)
+
+        attn_t2i_mask = x_mask.unsqueeze(1).expand(-1, N_t, -1)
+        attn_t2i = attn_t2i.masked_fill(attn_t2i_mask.unsqueeze(1), float('-inf'))
+        attn_t2i = attn_t2i.softmax(dim=-1)
+
+        attn_i2t = attn_i2t.masked_fill(attn_t2i_mask.transpose(1, 2).unsqueeze(1), 0)
+        attn_t2i = attn_t2i.masked_fill(attn_i2t_mask.transpose(1, 2).unsqueeze(1), 0)
+        x1 = attn_t2i @ v_i
+        x = attn_i2t @ x1
+        
+        # q_i = q_i * self.scale
+        # attn = q_i @ k_i.transpose(-2, -1)
+        # attn_mask = x_mask.unsqueeze(1).expand(-1, N_i, -1)
+        # attn = attn.masked_fill(attn_mask.unsqueeze(1), float('-inf'))
+        # attn = attn.softmax(dim=-1)
+        # attn = attn.masked_fill(attn_mask.transpose(1, 2).unsqueeze(1), 0)
+        # attn = self.attn_drop(attn)
+        # x = attn @ v_i
+
+        x = x.transpose(1, 2).reshape(B, N_i, C)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x

@@ -70,7 +70,6 @@ class ViT(VisionTransformer):
         t = text_list[0]
         t_mask = text_list[1]
         # x = self.pos_drop(x)
-        import pdb;pdb.set_trace()
         
         for i in range(0, 12):
             x = self.blocks[i](x, x_mask, t, t_mask)

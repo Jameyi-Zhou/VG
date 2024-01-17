@@ -10,9 +10,9 @@ from .vl_transformer import build_vl_transformer
 from utils.box_utils import xywh2xyxy
 
 
-class TransVG(nn.Module):
+class VGModel(nn.Module):
     def __init__(self, args):
-        super(TransVG, self).__init__()
+        super(VGModel, self).__init__()
         hidden_dim = args.vl_hidden_dim
         self.num_visu_token = int((args.imsize / 16) ** 2) + 1  # cls_token
         self.num_text_token = args.max_query_len
@@ -40,11 +40,13 @@ class TransVG(nn.Module):
         # language branch
         text_src, text_mask = self.textmodel(text_data)
         assert text_mask is not None
-        text_src = self.text_proj(text_src).permute(1, 0, 2) # (N*B)xC
-
+        
         # visual branch
-        visu_src, visu_mask = self.visumodel(img_data)
+        text_list = [text_src, text_mask]
+        visu_src, visu_mask = self.visumodel(img_data, text_list)
         assert visu_mask is not None
+
+        text_src = self.text_proj(text_src).permute(1, 0, 2) # (N*B)xC
         visu_src = self.visu_proj(visu_src).permute(1, 0, 2) # (N*B)xC
 
         # multimodal decoder

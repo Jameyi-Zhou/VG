@@ -1,5 +1,5 @@
-from .trans_vg import TransVG
+from .vg_model import VGModel
 
 
 def build_model(args):
-    return TransVG(args)
+    return VGModel(args)

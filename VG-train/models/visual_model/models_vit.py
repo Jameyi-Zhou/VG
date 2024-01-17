@@ -11,33 +11,69 @@ from .vision_transformer import VisionTransformer
 from PIL import Image
 
 
+class DownSampleLayer(nn.Module):
+    def __init__(self, in_chans) -> None:
+        super().__init__()
+        mid_chans = 256
+        self.conv0 = nn.Conv2d(in_chans, mid_chans, kernel_size=(1, 1))
+        self.conv1 = nn.Conv2d(mid_chans, mid_chans, kernel_size=(3, 3), stride=2, padding=(1, 1))
+        self.conv2 = nn.Conv2d(mid_chans, in_chans, kernel_size=(1, 1))
+    
+    def forward(self, x):
+        x = self.conv0(x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        return x
+
+
 class ViT(VisionTransformer):
     def __init__(self, **kwargs):
         super(ViT, self).__init__(**kwargs)
         self.img_size=kwargs['img_size']
         self.num_patches = self.patch_embed.num_patches
+        self.num_scales = 3
+        
+        self.conv_downsample1 = DownSampleLayer(self.embed_dim)
+        self.conv_downsample2 = DownSampleLayer(self.embed_dim)
+        self.scale_pos_embed = nn.Embedding(self.num_scales, self.embed_dim)
+
         del self.norm
         del self.fc_norm
         del self.head_drop
         del self.head
 
-
-    def forward(self, tensor_list):
-        x, m = tensor_list.decompose()
+    def forward(self, input_tensors, text_list):
+        x, m = input_tensors.decompose()
         bs = x.shape[0]
-        v_mask = F.interpolate(m[None].float(), size=(self.img_size // 16, self.img_size // 16)).to(torch.bool)[0]
-        cls_mask = torch.zeros((bs, 1)).to(x.device).to(torch.bool)
-        v_mask = v_mask.flatten(1)
-        mask = torch.cat([cls_mask, v_mask], dim=1)
-        x = self.patch_embed(x)
 
-        cls_tokens = self.cls_token.expand(bs, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
-        x = torch.cat((cls_tokens, x), dim=1)
-        x = x + self.pos_embed
-        x = self.pos_drop(x)
+        cls_tokens = self.cls_token.expand(bs, -1, -1)
+        x0 = self.patch_embed(x)  # (bs, 768, 40, 40)
+        x1 = self.conv_downsample1(x0)
+        x2 = self.conv_downsample2(x1)
+        
+        # applying different scale mask to different scale fetures 
+        v_mask0 = F.interpolate(m[None].float(), size=(x0.shape[-1], x0.shape[-1])).to(torch.bool)[0].flatten(1)
+        v_mask1 = F.interpolate(m[None].float(), size=(x1.shape[-1], x1.shape[-1])).to(torch.bool)[0].flatten(1)
+        v_mask2 = F.interpolate(m[None].float(), size=(x2.shape[-1], x2.shape[-1])).to(torch.bool)[0].flatten(1)
+        cls_mask = torch.zeros((bs, 1)).to(x.device).to(torch.bool)
+        x_mask = torch.cat([cls_mask, v_mask0, v_mask1, v_mask2], dim=1)
+
+        x0 = x0.flatten(2).transpose(1, 2)
+        x1 = x1.flatten(2).transpose(1, 2)
+        x2 = x2.flatten(2).transpose(1, 2)
+        scale_pos_embed = self.scale_pos_embed.weight.unsqueeze(0)
+        x0 = x0 + scale_pos_embed[:, 0:1, :].expand(-1, x0.shape[-2], -1) + self.pos_embed[:, 0:x0.shape[-2], :]
+        x1 = x1 + scale_pos_embed[:, 1:2, :].expand(-1, x1.shape[-2], -1) + self.pos_embed[:, x0.shape[-2]:x1.shape[-2]+x0.shape[-2], :]
+        x2 = x2 + scale_pos_embed[:, 2:3, :].expand(-1, x2.shape[-2], -1) + self.pos_embed[:, x1.shape[-2]+x0.shape[-2]:x2.shape[-2]+x1.shape[-2]+x0.shape[-2], :]
+        x = torch.cat([cls_tokens, x0, x1, x2], dim=1)
+
+        t = text_list[0]
+        t_mask = text_list[1]
+        # x = self.pos_drop(x)
+        import pdb;pdb.set_trace()
         
         for i in range(0, 12):
-            x, attn = self.blocks[i](x, key_padding_mask=mask)
+            x = self.blocks[i](x, x_mask, t, t_mask)
         
         # attn_map = attn[0, :, 0 , 1:]
         # attn_map_norm = attn_map / attn_map.sum(dim=1, keepdim=True)
@@ -51,9 +87,8 @@ class ViT(VisionTransformer):
         #     ax.set_title(f'Head {i+1}')
         
         # plt.savefig('heatmap.png')
-        # import pdb;pdb.set_trace()
 
-        return x, mask  # [b, 401, 768]
+        return x, x_mask
     
 
 def vit_base_patch16(**kwargs):

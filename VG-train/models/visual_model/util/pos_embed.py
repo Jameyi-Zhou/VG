@@ -94,12 +94,17 @@ def interpolate_pos_embed(model, checkpoint_model):
             pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
             pos_tokens1 = torch.nn.functional.interpolate(
                 pos_tokens, size=(new_size1, new_size1), mode='bicubic', align_corners=False)
+            pos_tokens1 = pos_tokens1.unfold(2, 10, 10).unfold(3, 10, 10)
+            pos_tokens1 = pos_tokens1.contiguous().view(1, 768, 16, 10, 10).flatten(3)
             pos_tokens2 = torch.nn.functional.interpolate(
                 pos_tokens, size=(new_size2, new_size2), mode='bicubic', align_corners=False)
+            pos_tokens2 = pos_tokens2.unfold(2, 10, 10).unfold(3, 10, 10)
+            pos_tokens2 = pos_tokens2.contiguous().view(1, 768, 4, 10, 10).flatten(3)
             pos_tokens3 = torch.nn.functional.interpolate(
                 pos_tokens, size=(new_size3, new_size3), mode='bicubic', align_corners=False)
-            pos_tokens1 = pos_tokens1.permute(0, 2, 3, 1).flatten(1, 2)
-            pos_tokens2 = pos_tokens2.permute(0, 2, 3, 1).flatten(1, 2)
-            pos_tokens3 = pos_tokens3.permute(0, 2, 3, 1).flatten(1, 2)
-            new_pos_embed = torch.cat((extra_tokens, pos_tokens1, pos_tokens2, pos_tokens3), dim=1)
+            pos_tokens3 = pos_tokens3.unfold(2, 10, 10).unfold(3, 10, 10)
+            pos_tokens3 = pos_tokens3.contiguous().view(1, 768, 1, 10, 10).flatten(3)
+            extra_tokens = extra_tokens.unsqueeze(1).expand(-1, 21, -1, -1)
+            new_pos_embed = torch.cat([pos_tokens1, pos_tokens2, pos_tokens3], dim=2).permute(0, 2, 3, 1)
+            new_pos_embed = torch.cat([extra_tokens, new_pos_embed], dim=2)
             checkpoint_model['pos_embed'] = new_pos_embed

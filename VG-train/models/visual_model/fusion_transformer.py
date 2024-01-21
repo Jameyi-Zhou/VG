@@ -74,7 +74,7 @@ class Attention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim ** -0.5
-        self.fused_attn = False
+
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
         self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
@@ -82,51 +82,27 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def forward(self, x, x_mask, t, t_mask) -> torch.Tensor:
-        '''
-        x = [cls_tokens, x0, x1, x2]
-        mask = [cls_mask, v_mask0, v_mask1, v_mask2]
-        '''
-
-        B, N_i, C = x.shape
-        _, N_t, _ = t.shape
-        qkv = self.qkv(x).reshape(B, N_i, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
-        q_i, k_i, v_i = qkv.unbind(0)
-        q_i, k_i = self.q_norm(q_i), self.k_norm(k_i)
-
-        q_t = k_t = t.reshape(B, N_t, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
-        q_i = q_i * self.scale
-        q_t = q_t * self.scale
-        attn_i2t = q_i @ k_t.transpose(-2, -1)
-        attn_t2i = q_t @ k_i.transpose(-2, -1)
+    def forward(self, x: torch.Tensor, mask) -> torch.Tensor:
+        B, C, N, D = x.shape
         
-        attn_i2t_mask = t_mask.unsqueeze(1).expand(-1, N_i, -1)
-        attn_i2t = attn_i2t.masked_fill(attn_i2t_mask.unsqueeze(1), float('-inf'))
-        attn_i2t = attn_i2t.softmax(dim=-1)
+        qkv = self.qkv(x).reshape(B, C, N, 3, self.num_heads, self.head_dim).permute(3, 0, 1, 4, 2, 5)
+        q, k, v = qkv.unbind(0)
+        q, k = self.q_norm(q), self.k_norm(k)
 
-        attn_t2i_mask = x_mask.unsqueeze(1).expand(-1, N_t, -1)
-        attn_t2i = attn_t2i.masked_fill(attn_t2i_mask.unsqueeze(1), float('-inf'))
-        attn_t2i = attn_t2i.softmax(dim=-1)
+        q = q * self.scale
+        attn = q @ k.transpose(-2, -1)
+        attn_mask = mask.unsqueeze(2).expand(-1, -1, N, -1)
+        attn = attn.masked_fill(attn_mask.unsqueeze(2), float('-inf'))
+        attn = attn.softmax(dim=-1)
+        attn = attn.masked_fill(attn_mask.transpose(2, 3).unsqueeze(2), 0)
+        attn = self.attn_drop(attn)
+        x = attn @ v
 
-        attn_i2t = attn_i2t.masked_fill(attn_t2i_mask.transpose(1, 2).unsqueeze(1), 0)
-        attn_t2i = attn_t2i.masked_fill(attn_i2t_mask.transpose(1, 2).unsqueeze(1), 0)
-        x1 = attn_t2i @ v_i
-        x = attn_i2t @ x1
-        
-        # q_i = q_i * self.scale
-        # attn = q_i @ k_i.transpose(-2, -1)
-        # attn_mask = x_mask.unsqueeze(1).expand(-1, N_i, -1)
-        # attn = attn.masked_fill(attn_mask.unsqueeze(1), float('-inf'))
-        # attn = attn.softmax(dim=-1)
-        # attn = attn.masked_fill(attn_mask.transpose(1, 2).unsqueeze(1), 0)
-        # attn = self.attn_drop(attn)
-        # x = attn @ v_i
-
-        x = x.transpose(1, 2).reshape(B, N_i, C)
+        x = x.transpose(2, 3).reshape(B, C, N, D)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
-
+    
 
 class LayerScale(nn.Module):
     def __init__(
@@ -148,6 +124,7 @@ class Block(nn.Module):
             self,
             dim: int,
             num_heads: int,
+            # blockid: int,
             mlp_ratio: float = 4.,
             qkv_bias: bool = False,
             qk_norm: bool = False,
@@ -161,6 +138,8 @@ class Block(nn.Module):
     ) -> None:
         super().__init__()
         self.norm1 = norm_layer(dim)
+        # self.blockid = blockid
+        # if blockid % 3 == 0:
         self.attn = Attention(
             dim,
             num_heads=num_heads,
@@ -169,7 +148,17 @@ class Block(nn.Module):
             attn_drop=attn_drop,
             proj_drop=proj_drop,
             norm_layer=norm_layer,
-        )
+        )  
+        # else: 
+        #     self.attn = Attention(
+        #         dim,
+        #         num_heads=num_heads,
+        #         qkv_bias=qkv_bias,
+        #         qk_norm=qk_norm,
+        #         attn_drop=attn_drop,
+        #         proj_drop=proj_drop,
+        #         norm_layer=norm_layer,
+        #     )
         self.ls1 = LayerScale(dim, init_values=init_values) if init_values else nn.Identity()
         self.drop_path1 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
@@ -183,8 +172,8 @@ class Block(nn.Module):
         self.ls2 = LayerScale(dim, init_values=init_values) if init_values else nn.Identity()
         self.drop_path2 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
-    def forward(self, x, x_mask, t, t_mask) -> torch.Tensor:
-        x = x + self.attn(self.norm1(x), x_mask, t, t_mask)
+    def forward(self, x, mask) -> torch.Tensor:
+        x = x + self.attn(self.norm1(x), mask)
         x = x + self.mlp(self.norm2(x))
         return x
 
@@ -295,7 +284,7 @@ class VisionTransformer(nn.Module):
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim)) if class_token else None
         self.reg_token = nn.Parameter(torch.zeros(1, reg_tokens, embed_dim)) if reg_tokens else None
         embed_len = num_patches + num_patches // 4 + num_patches // 16 + self.num_prefix_tokens
-        self.pos_embed = nn.Parameter(torch.randn(1, embed_len, embed_dim) * .02)
+        self.pos_embed = nn.Parameter(torch.randn(1, (embed_len - 1) // 100, 101, embed_dim) * .02)
         self.pos_drop = nn.Dropout(p=pos_drop_rate)
         if patch_drop_rate > 0:
             self.patch_drop = PatchDropout(
@@ -345,7 +334,7 @@ class VisionTransformer(nn.Module):
     def init_weights(self, mode: Literal['jax', 'jax_nlhb', 'moco', ''] = '') -> None:
         assert mode in ('jax', 'jax_nlhb', 'moco', '')
         head_bias = -math.log(self.num_classes) if 'nlhb' in mode else 0.
-        trunc_normal_(self.pos_embed, std=.02)
+        # trunc_normal_(self.pos_embed, std=.02)
         if self.cls_token is not None:
             nn.init.normal_(self.cls_token, std=1e-6)
         named_apply(get_init_weights_vit(mode, head_bias), self)

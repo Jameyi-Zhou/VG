@@ -17,7 +17,7 @@ from .modeling import BertModel
 
 
 class BERT(nn.Module):
-    def __init__(self, name: str, train_bert: bool, hidden_dim: int, max_len: int, enc_num):
+    def __init__(self, name: str, train_bert: bool, enc_num):
         super().__init__()
         if name == 'bert-base-uncased':
             self.num_channels = 768
@@ -48,7 +48,5 @@ class BERT(nn.Module):
 def build_bert(args):
     # position_embedding = build_position_encoding(args)
     train_bert = args.lr_bert > 0
-    bert = BERT(args.bert_model, train_bert, args.hidden_dim, args.max_query_len, args.bert_enc_num)
-    # model = Joiner(bert, position_embedding)
-    # model.num_channels = bert.num_channels
+    bert = BERT(args.bert_model, train_bert, args.bert_enc_num)
     return bert

@@ -32,7 +32,7 @@ def get_args_parser():
                         help='gradient clipping max norm')
     parser.add_argument('--eval', dest='eval', default=False, action='store_true', help='if evaluation only')
     parser.add_argument('--optimizer', default='adamw', type=str)
-    parser.add_argument('--lr_scheduler', default='step', type=str)
+    parser.add_argument('--lr_scheduler', default='poly', type=str)
     parser.add_argument('--lr_drop', default=60, type=int)
     
     # Augmentation options
@@ -50,6 +50,7 @@ def get_args_parser():
                         help="Name of model to be exploited.")
     
     # ViT params
+    parser.add_argument('--use_mae', action='store_true')
     parser.add_argument('--vit_model', default='base', type=str, help="base/large")
     parser.add_argument('--vit_checkpoint', default='./checkpoints/mae_vit_base.pth', type=str)
     parser.add_argument('--imsize', default=640, type=int, help='image size')
@@ -85,12 +86,12 @@ def get_args_parser():
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=13, type=int)
     parser.add_argument('--resume', default='', help='resume from checkpoint')
-    # parser.add_argument('--detr_model', default='./saved_models/detr-r50.pth', type=str, help='detr model')
     parser.add_argument('--bert_model', default='bert-base-uncased', type=str, help='bert model')
+    parser.add_argument('--roberta_model', default='roberta-base', type=str, help='roberta model')
     parser.add_argument('--light', dest='light', default=False, action='store_true', help='if use smaller model')
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
-    parser.add_argument('--num_workers', default=2, type=int)
+    parser.add_argument('--num_workers', default=1, type=int)
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,

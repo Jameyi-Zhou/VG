@@ -13,7 +13,7 @@ from typing import Dict, List
 from utils.misc import NestedTensor, is_main_process
 # from .position_encoding import build_position_encoding
 
-from .modeling import BertModel
+from .modeling_bert import BertModel
 
 
 class BERT(nn.Module):

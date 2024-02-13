@@ -22,6 +22,7 @@ sys.path.append('.')
 
 from PIL import Image
 from pytorch_pretrained_bert.tokenization import BertTokenizer
+from transformers.models.roberta import RobertaTokenizer
 from utils.word_utils import Corpus
 
 
@@ -151,7 +152,7 @@ class TransVGDataset(data.Dataset):
     def __init__(self, data_root, split_root='data', dataset='referit',  
                  transform=None, return_idx=False, testmode=False,
                  split='train', max_query_len=128, lstm=False, 
-                 bert_model='bert-base-uncased'):
+                 bert_model='bert-base-uncased', roberta_model='roberta-base'):
         self.images = []
         self.data_root = data_root  # ln_data
         self.split_root = split_root  # data
@@ -161,6 +162,7 @@ class TransVGDataset(data.Dataset):
         self.transform = transform
         self.testmode = testmode
         self.split = split
+        # self.tokenizer = RobertaTokenizer.from_pretrained(roberta_model)
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=True)
         self.return_idx=return_idx
 

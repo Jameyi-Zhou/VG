@@ -15,6 +15,7 @@ from typing import Optional, List
 import torch
 import torch.distributed as dist
 from torch import Tensor
+import numpy as np
 
 # needed due to empty tensor bug in pytorch and torchvision 0.5
 import torchvision
@@ -294,12 +295,12 @@ def collate_fn(raw_batch):
     raw_batch = list(zip(*raw_batch))
     
     img = torch.stack(raw_batch[0])
-    img_mask = torch.tensor(raw_batch[1])
+    img_mask = torch.tensor(np.array(raw_batch[1]))
     img_data = NestedTensor(img, img_mask)
-    word_id = torch.tensor(raw_batch[2])
-    word_mask = torch.tensor(raw_batch[3])
+    word_id = torch.tensor(np.array(raw_batch[2]))
+    word_mask = torch.tensor(np.array(raw_batch[3]))
     text_data = NestedTensor(word_id, word_mask)
-    bbox = torch.tensor(raw_batch[4])
+    bbox = torch.tensor(np.array(raw_batch[4]))
     batch = [img_data, text_data, bbox]
     return tuple(batch)
 

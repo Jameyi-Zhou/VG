@@ -62,7 +62,7 @@ def get_args_parser():
                         help="Dropout applied in the vision-language transformer")
     parser.add_argument('--vl_nheads', default=8, type=int,
                         help="Number of attention heads inside the vision-language transformer's attentions")
-    parser.add_argument('--vl_hidden_dim', default=64, type=int,
+    parser.add_argument('--vl_hidden_dim', default=768, type=int,
                         help='Size of the embeddings (dimension of the vision-language transformer)')
     parser.add_argument('--vl_dim_feedforward', default=2048, type=int,
                         help="Intermediate size of the feedforward layers in the vision-language transformer blocks")

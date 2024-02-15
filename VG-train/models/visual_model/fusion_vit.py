@@ -27,6 +27,15 @@ class DownSampleLayer(nn.Module):
         return x
 
 
+def get_window(x, mask):
+    bs, w, h, c = x.shape
+    ww = w // 2
+    wh = h // 2
+    x1 = x.view(bs, 2, ww, 2, wh, c).permute(0, 1, 3, 2, 4, 5).reshape(bs * 4, ww * wh, c)
+    mask1 = mask.view(bs, 2, ww, 2, wh).permute(0, 1, 3, 2, 4).reshape(bs * 4, ww * wh)
+    return x1, mask1
+
+
 class FusionViT(VisionTransformer):
     def __init__(self, **kwargs):
         super(FusionViT, self).__init__(**kwargs)
@@ -44,21 +53,32 @@ class FusionViT(VisionTransformer):
 
     def forward(self, tensor_list):
         x, m = tensor_list.decompose()
-        bs = x.shape[0]
-        v_mask = F.interpolate(m[None].float(), size=(self.img_size // 16, self.img_size // 16)).to(torch.bool)[0]
-        cls_mask = torch.zeros((bs, 1)).to(x.device).to(torch.bool)
-        v_mask = v_mask.flatten(1)
-        mask = torch.cat([cls_mask, v_mask], dim=1)
         x = self.patch_embed(x)
-
-        cls_tokens = self.cls_token.expand(bs, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
+        x = x + self.pos_embed[:, 1:, :]
+        
+        bs1, _, c = x.shape 
+        x = x.reshape(bs1, self.img_size // 16, self.img_size // 16, c)  # [bs, w, h, 768]
+        v_mask = F.interpolate(m[None].float(), size=(self.img_size // 16, self.img_size // 16)).to(torch.bool)[0]
+        x, v_mask = get_window(x, v_mask)
+        
+        bs = x.shape[0]
+        cls_mask = torch.zeros((bs, 1)).to(x.device).to(torch.bool)
+        mask = torch.cat([cls_mask, v_mask], dim=1)
+        
+        cls_tokens = (self.cls_token + self.pos_embed[:, 0:1, :]).expand(bs, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         x = torch.cat((cls_tokens, x), dim=1)
-        x = x + self.pos_embed
+        
         x = self.pos_drop(x)
         
         for i in range(0, 12):
             x, attn = self.blocks[i](x, key_padding_mask=mask)
-        
+        x1 = x[:, 1:, :].reshape(bs1, 400, 768)
+        cls_tokens1 = x[:, 0:1, :].reshape(bs1, 4, 768)
+        cls_tokens1 = torch.mean(cls_tokens1, dim=1, keepdim=True)
+        x = torch.cat((cls_tokens1, x1), dim=1)
+        v_mask1 = v_mask.reshape(bs1, 400)
+        cls_mask1 = cls_mask = torch.zeros((bs1, 1)).to(x.device).to(torch.bool)
+        mask = torch.cat([cls_mask1, v_mask1], dim=1)
         # attn_map = attn[0, :, 0 , 1:]
         # attn_map_norm = attn_map / attn_map.sum(dim=1, keepdim=True)
         # attn_map_norm = attn_map_norm.reshape(12, 20, -1)

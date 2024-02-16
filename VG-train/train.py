@@ -60,11 +60,11 @@ def get_args_parser():
     # Vision-Language Transformer
     parser.add_argument('--vl_dropout', default=0.1, type=float,
                         help="Dropout applied in the vision-language transformer")
-    parser.add_argument('--vl_nheads', default=8, type=int,
+    parser.add_argument('--vl_nheads', default=12, type=int,
                         help="Number of attention heads inside the vision-language transformer's attentions")
     parser.add_argument('--vl_hidden_dim', default=768, type=int,
                         help='Size of the embeddings (dimension of the vision-language transformer)')
-    parser.add_argument('--vl_dim_feedforward', default=2048, type=int,
+    parser.add_argument('--vl_dim_feedforward', default=3072, type=int,
                         help="Intermediate size of the feedforward layers in the vision-language transformer blocks")
     parser.add_argument('--vl_enc_layers', default=6, type=int,
                         help='Number of encoders in the vision-language transformer')

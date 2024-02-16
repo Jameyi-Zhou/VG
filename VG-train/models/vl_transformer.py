@@ -192,7 +192,7 @@ def build_vl_transformer(args):
         nhead=args.vl_nheads,
         dim_feedforward=args.vl_dim_feedforward,
         num_encoder_layers=args.vl_enc_layers,
-        normalize_before=False,
+        normalize_before=True,
     )
 
 

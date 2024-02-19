@@ -8,10 +8,16 @@
 # print(x)
 
 
-from utils.misc import SmoothedValue
+# from utils.misc import SmoothedValue
 
-sv = SmoothedValue()
-import pdb;pdb.set_trace()
-sv.update(1.0)
-sv.update(2.0)
-sv.update(3.0)
+# sv = SmoothedValue()
+# import pdb;pdb.set_trace()
+# sv.update(1.0)
+# sv.update(2.0)
+# sv.update(3.0)
+
+import torch
+x = torch.randn(2, 4)
+print(x)
+x =torch.repeat_interleave(x, repeats=2, dim=0)
+print(x)

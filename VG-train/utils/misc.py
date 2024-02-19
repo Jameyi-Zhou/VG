@@ -280,17 +280,6 @@ def get_sha():
     return message
 
 
-# def collate_fn(raw_batch):
-#     raw_batch = list(zip(*raw_batch))
-#     img_data = nested_tensor_from_tensor_list(raw_batch[0])
-#     word_id = torch.tensor(raw_batch[1])
-#     word_mask = torch.tensor(raw_batch[2])
-#     text_data = NestedTensor(word_id, word_mask)
-#     bbox = torch.tensor(raw_batch[3])
-#     batch = [img_data, text_data, bbox]
-#     return tuple(batch)
-
-
 def collate_fn(raw_batch):
     raw_batch = list(zip(*raw_batch))
     

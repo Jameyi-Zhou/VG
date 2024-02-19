@@ -54,17 +54,19 @@ def get_args_parser():
     parser.add_argument('--vit_model', default='base', type=str, help="base/large")
     parser.add_argument('--vit_checkpoint', default='./checkpoints/mae_vit_base.pth', type=str)
     parser.add_argument('--imsize', default=640, type=int, help='image size')
-
+    # parser.add_argument('--windowing', action='store_true')
+    
+    # Bert params
     parser.add_argument('--bert_enc_num', default=12, type=int)
 
     # Vision-Language Transformer
     parser.add_argument('--vl_dropout', default=0.1, type=float,
                         help="Dropout applied in the vision-language transformer")
-    parser.add_argument('--vl_nheads', default=12, type=int,
+    parser.add_argument('--vl_nheads', default=8, type=int,
                         help="Number of attention heads inside the vision-language transformer's attentions")
-    parser.add_argument('--vl_hidden_dim', default=768, type=int,
+    parser.add_argument('--vl_hidden_dim', default=512, type=int,
                         help='Size of the embeddings (dimension of the vision-language transformer)')
-    parser.add_argument('--vl_dim_feedforward', default=3072, type=int,
+    parser.add_argument('--vl_dim_feedforward', default=2048, type=int,
                         help="Intermediate size of the feedforward layers in the vision-language transformer blocks")
     parser.add_argument('--vl_enc_layers', default=6, type=int,
                         help='Number of encoders in the vision-language transformer')
@@ -86,6 +88,7 @@ def get_args_parser():
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=13, type=int)
     parser.add_argument('--resume', default='', help='resume from checkpoint')
+    parser.add_argument('--finetune', default='', help='finetune from checkpoint')
     parser.add_argument('--bert_model', default='bert-base-uncased', type=str, help='bert model')
     parser.add_argument('--roberta_model', default='roberta-base', type=str, help='roberta model')
     parser.add_argument('--light', dest='light', default=False, action='store_true', help='if use smaller model')
@@ -191,11 +194,16 @@ def main(args):
             optimizer.load_state_dict(checkpoint['optimizer'])
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             args.start_epoch = checkpoint['epoch'] + 1
-    # elif args.detr_model is not None:
-    #     checkpoint = torch.load(args.detr_model, map_location='cpu')  # checkpoint有decoder的权重
-    #     missing_keys, unexpected_keys = model_without_ddp.visumodel.load_state_dict(checkpoint['model'], strict=False)
-    #     print('Missing keys when loading detr model:')
-    #     print(missing_keys)
+
+
+    if args.finetune:
+        checkpoint = torch.load(args.finetune, map_location='cpu')
+        model_without_ddp.load_state_dict(checkpoint['model'])
+        if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
+            optimizer = torch.optim.AdamW(param_list, lr=args.lr, weight_decay=args.weight_decay)
+            lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
+            args.start_epoch = checkpoint['epoch'] + 1
+        
 
     output_dir = Path(args.output_dir)
     if args.output_dir and utils.is_main_process():

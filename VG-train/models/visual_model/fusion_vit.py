@@ -12,73 +12,159 @@ from PIL import Image
 from torchvision.models import vit_b_16, ViT_B_16_Weights
 
 
-class DownSampleLayer(nn.Module):
-    def __init__(self, in_chans) -> None:
+class NormalWindow(nn.Module):
+    def __init__(self) -> None:
         super().__init__()
-        mid_chans = 256
-        self.conv0 = nn.Conv2d(in_chans, mid_chans, kernel_size=(1, 1))
-        self.conv1 = nn.Conv2d(mid_chans, mid_chans, kernel_size=(3, 3), stride=2, padding=(1, 1))
-        self.conv2 = nn.Conv2d(mid_chans, in_chans, kernel_size=(1, 1))
     
-    def forward(self, x):
-        x = self.conv0(x)
-        x = self.conv1(x)
-        x = self.conv2(x)
-        return x
+    def forward(self, x, mask):
+        pass
 
 
-def get_window(x, mask):
-    bs, w, h, c = x.shape
-    ww = w // 2
-    wh = h // 2
-    x1 = x.view(bs, 2, ww, 2, wh, c).permute(0, 1, 3, 2, 4, 5).reshape(bs * 4, ww * wh, c)
-    mask1 = mask.view(bs, 2, ww, 2, wh).permute(0, 1, 3, 2, 4).reshape(bs * 4, ww * wh)
-    return x1, mask1
+class ShuffleWindow(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+    
+    def forward(self, x, mask):
+        pass
+
+
+class NormalWindowReverse(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+    
+    def forward(self, x, mask):
+        pass
+
+
+class ShuffleWindowReverse(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+    
+    def forward(self, x, mask):
+        pass
+
+
+class PatchMerge(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+    
+    def forward(self, x, mask):
+        return x, mask
 
 
 class FusionViT(VisionTransformer):
     def __init__(self, **kwargs):
         super(FusionViT, self).__init__(**kwargs)
-        self.img_size=kwargs['img_size']
-        self.num_patches = self.patch_embed.num_patches
-        self.num_scales = 3
         
-        self.scale_pos_embed = nn.Embedding(self.num_scales, self.embed_dim)
-        self.cls_mask = torch.zeros((1, 1))
-
+        self.img_size = kwargs['img_size']
+        self.windowing = False
+        self.num_patches = self.patch_embed.num_patches
+        
+        self.pm_layer1 = PatchMerge()
+        self.pm_layer2 = PatchMerge()
+        
         del self.norm
         del self.fc_norm
         del self.head_drop
         del self.head
 
+    def normal_window(self, x, mask):
+        bs, n, c = x.shape
+        f_size = int((n - self.num_prefix_tokens - self.num_suffix_tokens) ** 0.5)
+        w_size = f_size // 2
+        w_bs = bs * 4
+
+        cls_tokens = x[:, 0:1, :]
+        v_tokens = x[:, 1:-1, :].reshape(bs, f_size, f_size, c)
+        dstl_tokens = x[:, -1:, :]
+        cls_mask = mask[:, 0:1]
+        v_mask = mask[:, 1:-1].reshape(bs, f_size, f_size)
+        dstl_mask = mask[:, -1:]
+
+        cls_tokens = torch.repeat_interleave(cls_tokens, repeats=4, dim=0)
+        v_tokens = v_tokens.view(bs, 2, w_size, 2, w_size, c).permute(0, 1, 3, 2, 4, 5).reshape(w_bs, w_size * w_size, c)
+        dstl_tokens = torch.repeat_interleave(dstl_tokens, repeats=4, dim=0)
+
+        cls_mask = torch.repeat_interleave(cls_mask, repeats=4, dim=0)
+        v_mask = v_mask.view(bs, 2, w_size, 2, w_size).permute(0, 1, 3, 2, 4).reshape(w_bs, w_size * w_size)
+        dstl_mask = torch.repeat_interleave(dstl_mask, repeats=4, dim=0)
+
+        x = torch.cat([cls_tokens, v_tokens, dstl_tokens], dim=1)
+        mask = torch.cat([cls_mask, v_mask, dstl_mask], dim=1)
+        
+        return x, mask
+
+    def recover_from_normal_window(self, x, mask):
+        w_bs, n, c = x.shape
+        w_size = int((n - self.num_prefix_tokens - self.num_suffix_tokens) ** 0.5)
+        f_size = w_size * 2
+        bs = w_bs // 4
+
+        cls_tokens = x[:, 0:1, :]
+        v_tokens = x[:, 1:-1, :].reshape(w_bs, w_size, w_size, c)
+        dstl_tokens = x[:, -1:, :]
+        cls_mask = mask[:, 0:1]
+        v_mask = mask[:, 1:-1].reshape(w_bs, w_size, w_size)
+        dstl_mask = mask[:, -1:]
+        
+        cls_tokens = cls_tokens.reshape(bs, 4, c)
+        cls_tokens = torch.mean(cls_tokens, dim=1, keepdim=True)
+        v_tokens = v_tokens.view(bs, 2, 2, w_size, w_size, c).permute(0, 1, 3, 2, 4, 5).reshape(bs, f_size * f_size, c)        
+        dstl_tokens = dstl_tokens.reshape(bs, 4, c)
+        dstl_tokens = torch.mean(dstl_tokens, dim=1, keepdim=True)
+        
+        cls_mask = cls_mask[:bs]
+        v_mask = v_mask.view(bs, 2, 2, w_size, w_size).permute(0, 1, 3, 2, 4).reshape(bs, f_size * f_size)
+        dstl_mask = dstl_mask[:bs]
+
+        x = torch.cat([cls_tokens, v_tokens, dstl_tokens], dim=1)
+        mask = torch.cat([cls_mask, v_mask, dstl_mask], dim=1)
+
+        return x, mask
+
+    def shuffle_window(x, mask):
+        pass
+
+    def recover_from_shuffle_window(x, mask):
+        pass
+
     def forward(self, tensor_list):
         x, m = tensor_list.decompose()
         x = self.patch_embed(x)
-        x = x + self.pos_embed[:, 1:, :]
+        bs, n, c = x.shape
+        cls_tokens = self.cls_token.expand(bs, -1, -1)
+        dstl_tokens = self.dstl_token.expand(bs, -1, -1)
+        x = torch.cat([cls_tokens, x, dstl_tokens], dim=1)
+        x = x + self.pos_embed
         
-        bs1, _, c = x.shape 
-        x = x.reshape(bs1, self.img_size // 16, self.img_size // 16, c)  # [bs, w, h, 768]
-        v_mask = F.interpolate(m[None].float(), size=(self.img_size // 16, self.img_size // 16)).to(torch.bool)[0]
-        x, v_mask = get_window(x, v_mask)
-        
-        bs = x.shape[0]
+        f_size = int(n ** 0.5)
+        mask = F.interpolate(m[None].float(), size=(f_size, f_size)).to(torch.bool)[0].reshape(bs, -1)
         cls_mask = torch.zeros((bs, 1)).to(x.device).to(torch.bool)
-        mask = torch.cat([cls_mask, v_mask], dim=1)
+        dstl_mask = torch.zeros((bs, 1)).to(x.device).to(torch.bool)        
+        mask = torch.cat([cls_mask, mask, dstl_mask], dim=1)
         
-        cls_tokens = (self.cls_token + self.pos_embed[:, 0:1, :]).expand(bs, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
-        x = torch.cat((cls_tokens, x), dim=1)
-        
-        x = self.pos_drop(x)
-        
-        for i in range(0, 12):
-            x, attn = self.blocks[i](x, key_padding_mask=mask)
-        x1 = x[:, 1:, :].reshape(bs1, 400, 768)
-        cls_tokens1 = x[:, 0:1, :].reshape(bs1, 4, 768)
-        cls_tokens1 = torch.mean(cls_tokens1, dim=1, keepdim=True)
-        x = torch.cat((cls_tokens1, x1), dim=1)
-        v_mask1 = v_mask.reshape(bs1, 400)
-        cls_mask1 = cls_mask = torch.zeros((bs1, 1)).to(x.device).to(torch.bool)
-        mask = torch.cat([cls_mask1, v_mask1], dim=1)
+        # x[bs, 402, 768], mask[bs, 402]
+        if self.windowing:
+            for i in range(0, 4):
+                x, mask = self.normal_window(x, mask)
+                x, attn = self.blocks[i](x, key_padding_mask=mask)
+                x, mask = self.recover_from_normal_window(x, mask)
+            self.pm_layer1(x, mask)  # patch_merge
+
+            for i in range(4, 8):
+                x, mask = self.normal_window(x, mask)
+                x, attn = self.blocks[i](x, key_padding_mask=mask) 
+                x, mask = self.recover_from_normal_window(x, mask)
+            self.pm_layer2(x, mask)  # patch_merge
+
+            for i in range(8, 12):
+                x, mask = self.normal_window(x, mask)
+                x, attn = self.blocks[i](x, key_padding_mask=mask)
+                x, mask = self.recover_from_normal_window(x, mask)
+        else:
+            for i in range(0, 12):
+                x, attn = self.blocks[i](x, key_padding_mask=mask)
+
         # attn_map = attn[0, :, 0 , 1:]
         # attn_map_norm = attn_map / attn_map.sum(dim=1, keepdim=True)
         # attn_map_norm = attn_map_norm.reshape(12, 20, -1)

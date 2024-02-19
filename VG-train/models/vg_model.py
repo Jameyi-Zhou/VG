@@ -13,7 +13,7 @@ class VGModel(nn.Module):
     def __init__(self, args):
         super(VGModel, self).__init__()
         
-        self.num_visu_token = int((args.imsize / 16) ** 2) + 1  # cls_token
+        self.num_visu_token = int((args.imsize / 16) ** 2) + 2  # cls_token
         self.num_text_token = args.max_query_len
 
         self.visumodel = build_vit(args)  # 构造vit分支

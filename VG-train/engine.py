@@ -24,7 +24,7 @@ def train_one_epoch(args, model: torch.nn.Module, data_loader: Iterable,
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
-
+    
     for batch in metric_logger.log_every(data_loader, print_freq, header):
         img_data, text_data, target = batch
         batch_size = img_data.tensors.size(0)
@@ -63,7 +63,8 @@ def train_one_epoch(args, model: torch.nn.Module, data_loader: Iterable,
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
         metric_logger.update_v2('miou', torch.mean(miou), batch_size)
         metric_logger.update_v2('accu', accu, batch_size)
-        
+        # import pdb; pdb.set_trace()
+    
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)

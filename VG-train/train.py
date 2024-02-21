@@ -33,7 +33,7 @@ def get_args_parser():
     parser.add_argument('--eval', dest='eval', default=False, action='store_true', help='if evaluation only')
     parser.add_argument('--optimizer', default='adamw', type=str)
     parser.add_argument('--lr_scheduler', default='poly', type=str)
-    parser.add_argument('--lr_drop', default=60, type=int)
+    parser.add_argument('--lr_drop', default=150, type=int)
     
     # Augmentation options
     parser.add_argument('--aug_blur', action='store_true',
@@ -64,9 +64,9 @@ def get_args_parser():
                         help="Dropout applied in the vision-language transformer")
     parser.add_argument('--vl_nheads', default=8, type=int,
                         help="Number of attention heads inside the vision-language transformer's attentions")
-    parser.add_argument('--vl_hidden_dim', default=512, type=int,
+    parser.add_argument('--vl_hidden_dim', default=256, type=int,
                         help='Size of the embeddings (dimension of the vision-language transformer)')
-    parser.add_argument('--vl_dim_feedforward', default=2048, type=int,
+    parser.add_argument('--vl_dim_feedforward', default=1024, type=int,
                         help="Intermediate size of the feedforward layers in the vision-language transformer blocks")
     parser.add_argument('--vl_enc_layers', default=6, type=int,
                         help='Number of encoders in the vision-language transformer')

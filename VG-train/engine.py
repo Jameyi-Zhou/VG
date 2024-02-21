@@ -29,6 +29,26 @@ def train_one_epoch(args, model: torch.nn.Module, data_loader: Iterable,
         img_data, text_data, target = batch
         batch_size = img_data.tensors.size(0)
 
+        # # 将tensor保存为图像
+        # import numpy as np
+        # from PIL import Image
+        # tensor = img_data.tensors
+        # img_array = tensor.squeeze().numpy().transpose(1, 2, 0)
+        # img_array = (img_array * 255).astype(np.uint8)
+        # img = Image.fromarray(img_array)
+        # img.save("figures/pad_image.png")
+        
+        # x = [tensor[:, :, 0::2, 0::2],
+        #      tensor[:, :, 1::2, 0::2],  
+        #      tensor[:, :, 0::2, 1::2],  
+        #      tensor[:, :, 1::2, 1::2]]
+        # for i in range(len(x)):
+        #     img_array = x[i].squeeze().numpy().transpose(1, 2, 0)
+        #     img_array = (img_array * 255).astype(np.uint8)
+        #     img = Image.fromarray(img_array)
+        #     img.save("figures/patchmerge_image{}.png".format(i))
+        # import pdb; pdb.set_trace()
+
         # copy to GPU
         img_data = img_data.to(device)
         text_data = text_data.to(device)

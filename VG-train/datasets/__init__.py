@@ -20,8 +20,8 @@ def make_transforms(args, image_set, is_onestage=False):
     if image_set == 'train':
         scales = []
         if args.aug_scale:
-            for i in range(7):
-                scales.append(imsize - 32 * i)
+            for i in range(8):
+                scales.append(imsize - imsize // 20 * i)
         else:
             scales = [imsize]
 
@@ -31,15 +31,16 @@ def make_transforms(args, image_set, is_onestage=False):
             crop_prob = 0.
     
         return T.Compose([
-            T.RandomSelect(
-                T.RandomResize(scales),
-                T.Compose([
-                    T.RandomResize([400, 500, 600], with_long_side=False),
-                    T.RandomSizeCrop(384, 600),
-                    T.RandomResize(scales),
-                ]),
-                p=crop_prob
-            ),
+            # T.RandomSelect(
+            #     T.RandomResize(scales),
+            #     T.Compose([
+            #         T.RandomResize([400, 500, 600], with_long_side=False),
+            #         T.RandomSizeCrop(384, 600),
+            #         T.RandomResize(scales),
+            #     ]),
+            #     p=crop_prob
+            # ),
+            T.RandomResize(scales),
             T.ColorJitter(0.4, 0.4, 0.4),
             T.GaussianBlur(aug_blur=args.aug_blur),
             T.RandomHorizontalFlip(),

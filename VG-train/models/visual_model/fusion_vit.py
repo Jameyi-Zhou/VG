@@ -59,12 +59,6 @@ class PatchMerging(nn.Module):
         self.num_extra_tokens = num_extra_tokens
         self.reduction = nn.Linear(4 * dim, dim, bias=False)
         self.norm = norm_layer(4 * dim)
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
 
     def forward(self, x, mask):
         bs, n, c = x.shape
@@ -108,11 +102,20 @@ class FusionViT(VisionTransformer):
         
         self.pm_layer1 = PatchMerging(dim=self.embed_dim, num_extra_tokens=self.num_prefix_tokens+self.num_suffix_tokens)
         self.pm_layer2 = PatchMerging(dim=self.embed_dim, num_extra_tokens=self.num_prefix_tokens+self.num_suffix_tokens)
+        self.resample0 = nn.Conv2d(self.embed_dim, self.embed_dim, kernel_size=(1, 1))
+        self.resample1 = nn.Conv2d(self.embed_dim, self.embed_dim, kernel_size=(1, 1))
+        self.resample2 = nn.Conv2d(self.embed_dim, self.embed_dim, kernel_size=(1, 1))
+        self._reset_parameters()
         
         del self.norm
         del self.fc_norm
         del self.head_drop
         del self.head
+
+    def _reset_parameters(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
 
     def normal_window(self, x, mask):
         bs, n, c = x.shape
@@ -247,17 +250,60 @@ class FusionViT(VisionTransformer):
         output_x = []
         output_mask = []
         # x[bs, 402, 768], mask[bs, 402]
-
+        
         if self.windowing:
             idx0 = torch.randperm(n)
             if self.train() and self.shuffle:
-                for i in range(0, 6):
+                for i in range(0, 2):
                     x, mask, attn = self.normal_window_forward(i * 2, x, mask)
                     x, mask, attn = self.shuffle_window_forward(i * 2 + 1, x, mask, idx0)
             else:
-                for i in range(0, 12):
+                for i in range(0, 4):
                     x, mask, attn = self.normal_window_forward(i, x, mask)
-            return x, mask
+            output_x.append(x[:, 1:-1, :])
+            output_mask.append(mask[:, 1:-1])
+            x, mask = self.pm_layer1(x, mask)  # patch merging
+
+            idx1 = torch.randperm(n // 4)
+            if self.train() and self.shuffle:
+                for i in range(2, 4):
+                    x, mask, attn = self.normal_window_forward(i * 2, x, mask)
+                    x, mask, attn = self.shuffle_window_forward(i * 2 + 1, x, mask, idx1)
+            else:
+                for i in range(4, 8):
+                    x, mask, attn = self.normal_window_forward(i, x, mask)
+            output_x.append(x[:, 1:-1, :])
+            output_mask.append(mask[:, 1:-1])
+            x, mask = self.pm_layer2(x, mask)  # patch merging
+ 
+            for i in range(8, 12):
+                x, attn = self.blocks[i](x, key_padding_mask=mask)
+            cls_tokens, dstl_tokens = x[:, :1, :], x[:, -1:, :]
+            cls_mask, dstl_mask = mask[:, :1], mask[:, -1:]
+            output_x.append(x[:, 1:-1, :])
+            output_mask.append(mask[:, 1:-1])
+            f_size0 = f_size
+            f_size1 = f_size0 // 2
+            f_size2 = f_size1 // 2
+            x2 = output_x[2].view(bs, f_size2, f_size2, -1).permute(0, 3, 1, 2)
+            x1 = output_x[1].view(bs, f_size1, f_size1, -1).permute(0, 3, 1, 2)
+            x0 = output_x[0].view(bs, f_size0, f_size0, -1).permute(0, 3, 1, 2)
+            '''
+            ' @TODO: ablation study 使用卷积上采样
+            '''
+            # 双三次插值上采样
+            x2 = self.resample2(x2) + x2
+            x2_unsample = torch.nn.functional.interpolate(x2, size=(f_size1, f_size1), mode='bicubic', align_corners=False)
+            x1 = self.resample1(x1) + x2_unsample
+            x1_unsample = torch.nn.functional.interpolate(x1, size=(f_size0, f_size0), mode='bicubic', align_corners=False)
+            x0 = self.resample0(x0) + x1_unsample
+            # concat
+            x2 = x2.permute(0, 2, 3, 1).view(bs, f_size2*f_size2, -1)
+            x1 = x1.permute(0, 2, 3, 1).view(bs, f_size1*f_size1, -1)
+            x0 = x0.permute(0, 2, 3, 1).view(bs, f_size0*f_size0, -1)
+            x_list = [cls_tokens, x0, x1, x2, dstl_tokens]
+            mask_list = [cls_mask, output_mask[0], output_mask[1], output_mask[2], dstl_mask]
+            return x_list, mask_list
         else:
             for i in range(0, 12):
                 x, attn = self.blocks[i](x, key_padding_mask=mask)

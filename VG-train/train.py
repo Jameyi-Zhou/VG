@@ -70,6 +70,7 @@ def get_args_parser():
                         help="Intermediate size of the feedforward layers in the vision-language transformer blocks")
     parser.add_argument('--vl_enc_layers', default=6, type=int,
                         help='Number of encoders in the vision-language transformer')
+    parser.add_argument('--num_dual_query_tokens', default=256, type=int)
 
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',

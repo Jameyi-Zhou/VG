@@ -32,7 +32,6 @@ class BERT(nn.Module):
                 parameter.requires_grad_(False)
 
     def forward(self, tensor_list: NestedTensor):
-
         if self.enc_num > 0:
             all_encoder_layers, _ = self.bert(tensor_list.tensors, token_type_ids=None, attention_mask=tensor_list.mask)
             # use the output of the X-th transformer encoder layers

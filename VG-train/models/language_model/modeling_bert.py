@@ -705,8 +705,17 @@ class BertModel(BertPreTrainedModel):
         self.encoder = BertEncoder(config)
         self.pooler = BertPooler(config)
         self.apply(self.init_bert_weights)
+        self.dstl_token = nn.Embedding(1, 768)
+        self.dstl_pos = nn.Embedding(1, 768)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, output_all_encoded_layers=True):
+        
+        bs = input_ids.shape[0]
+        dstl_tokens = self.dstl_token.weight.unsqueeze(0).expand(bs, -1, -1) + \
+        self.dstl_pos.weight.unsqueeze(0).expand(bs, -1, -1) 
+        dstl_mask = torch.zeros((bs, 1)).to(input_ids.device).to(torch.bool)
+        attention_mask = torch.cat([attention_mask, dstl_mask], dim=1)
+
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         if token_type_ids is None:
@@ -728,6 +737,8 @@ class BertModel(BertPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         embedding_output = self.embeddings(input_ids, token_type_ids)
+        embedding_output = torch.cat([embedding_output, dstl_tokens], dim=1)
+        
         encoded_layers = self.encoder(embedding_output,
                                       extended_attention_mask,
                                       output_all_encoded_layers=output_all_encoded_layers)

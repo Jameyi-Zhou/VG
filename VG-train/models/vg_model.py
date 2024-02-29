@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .visual_model.fusion_vit import build_vit
+from .visual_model.window_vit import build_vit
 from .language_model.model_bert import build_bert
 from .vl_fuseformer import build_vl_fuseformer
 from .language_model.model_roberta import build_roberta
@@ -19,7 +19,7 @@ class VGModel(nn.Module):
         self.num_visu_token1 = int((args.imsize / 32) ** 2)
         self.num_visu_token2 = int((args.imsize / 64) ** 2)
         self.num_visu_token = self.num_visu_token0 + self.num_visu_token1 + self.num_visu_token2 + 1  # cls_token
-        self.num_text_token = args.max_query_len
+        self.num_text_token = args.max_query_len - 1
 
         self.visumodel = build_vit(args)  # 构造vit分支
         self.textmodel = build_bert(args)  # 构造bert分支
@@ -45,6 +45,7 @@ class VGModel(nn.Module):
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
 
     def text_tokens_with_pos_embed(self, text_src):
+        text_src = text_src[:, 1:-1, :]
         text_src = text_src + self.text_pos_embed.weight.unsqueeze(0)
         return text_src
 
@@ -63,25 +64,26 @@ class VGModel(nn.Module):
         bs = img_data.tensors.shape[0]
         
         # language branch
-        text_src, text_mask = self.textmodel(text_data)
+        text_src, text_mask = self.textmodel(text_data)  # (bs, 22(42), 768)
         text_src = self.text_proj(text_src)
         text_tokens = self.text_tokens_with_pos_embed(text_src)
+        text_mask = text_mask[:, 1:]
         # visual branch
-        visu_src_list, visu_mask_list = self.visumodel(img_data)
+        visu_src_list, visu_mask_list = self.visumodel(img_data)  # (bs, 2102, 768)
         for i in range(len(visu_src_list)):
             visu_src_list[i] = self.visu_proj(visu_src_list[i])
         cls_tokens, visu_tokens = self.visu_tokens_with_pos_embed(visu_src_list)
         cls_mask, mask0, mask1, mask2, _ = visu_mask_list
-        visu_mask = torch.cat([mask0, mask1, mask2], dim=1)
+        visu_mask = torch.cat([cls_mask, mask0, mask1, mask2], dim=1)
         
         ####test
-        vl_src = torch.cat([cls_tokens, visu_tokens[:, 2000:, :], text_tokens], dim=1).permute(1, 0, 2)
-        vl_mask = torch.cat([cls_mask, mask2, text_mask], dim=1)
-        vg_hs = self.vl_fuseformer(vl_src, vl_mask)[0]
+        # vl_src = torch.cat([cls_tokens, visu_tokens[:, 2000:, :], text_tokens], dim=1).permute(1, 0, 2)
+        # vl_mask = torch.cat([cls_mask, mask2, text_mask], dim=1)
+        # vg_hs = self.vl_fuseformer(vl_src, vl_mask)[0]
         ####
         
-        # vg_hs = self.vl_fuseformer(cls_tokens, visu_tokens, text_tokens, visu_mask, text_mask, self.num_visu_token)  # fusion
-        # vg_hs = vg_hs.permute(1, 0, 2)[0]
+        vg_hs = self.vl_fuseformer(cls_tokens, visu_tokens, text_tokens, visu_mask, text_mask)  # fusion
+        vg_hs = vg_hs.permute(1, 0, 2)[0]
 
         pred_box = self.bbox_embed(vg_hs).sigmoid()
         return pred_box

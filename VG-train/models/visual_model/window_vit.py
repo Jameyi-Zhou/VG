@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from .fusion_transformer import VisionTransformer
+from .vision_transformer import VisionTransformer
 from PIL import Image
 from torchvision.models import vit_b_16, ViT_B_16_Weights
 
@@ -252,9 +252,10 @@ class FusionViT(VisionTransformer):
         # x[bs, 402, 768], mask[bs, 402]
         
         if self.windowing:
-            idx0 = torch.randperm(n)
+            
             if self.train() and self.shuffle:
                 for i in range(0, 2):
+                    idx0 = torch.randperm(n)
                     x, mask, attn = self.normal_window_forward(i * 2, x, mask)
                     x, mask, attn = self.shuffle_window_forward(i * 2 + 1, x, mask, idx0)
             else:
@@ -264,9 +265,10 @@ class FusionViT(VisionTransformer):
             output_mask.append(mask[:, 1:-1])
             x, mask = self.pm_layer1(x, mask)  # patch merging
 
-            idx1 = torch.randperm(n // 4)
+            
             if self.train() and self.shuffle:
                 for i in range(2, 4):
+                    idx1 = torch.randperm(n // 4)
                     x, mask, attn = self.normal_window_forward(i * 2, x, mask)
                     x, mask, attn = self.shuffle_window_forward(i * 2 + 1, x, mask, idx1)
             else:

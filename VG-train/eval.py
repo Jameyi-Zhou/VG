@@ -61,7 +61,7 @@ def get_args_parser():
                         help="Number of attention heads inside the vision-language transformer's attentions")
     parser.add_argument('--vl_hidden_dim', default=256, type=int,
                         help='Size of the embeddings (dimension of the vision-language transformer)')
-    parser.add_argument('--vl_dim_feedforward', default=2048, type=int,
+    parser.add_argument('--vl_dim_feedforward', default=1024, type=int,
                         help="Intermediate size of the feedforward layers in the vision-language transformer blocks")
     parser.add_argument('--vl_enc_layers', default=6, type=int,
                         help='Number of encoders in the vision-language transformer')
@@ -142,7 +142,7 @@ def main(args):
                                  drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers)
 
     checkpoint = torch.load(args.eval_model, map_location='cpu')
-    model_without_ddp.load_state_dict(checkpoint['model'])
+    model_without_ddp.load_state_dict(checkpoint['model'], strict=False)
 
     # output log
     output_dir = Path(args.output_dir)

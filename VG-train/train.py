@@ -70,6 +70,7 @@ def get_args_parser():
                         help="Intermediate size of the feedforward layers in the vision-language transformer blocks")
     parser.add_argument('--vl_enc_layers', default=6, type=int,
                         help='Number of encoders in the vision-language transformer')
+    parser.add_argument('--num_dual_query_tokens', default=256, type=int)
 
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',
@@ -201,7 +202,8 @@ def main(args):
         model_without_ddp.load_state_dict(checkpoint['model'])
         if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
             optimizer = torch.optim.AdamW(param_list, lr=args.lr, weight_decay=args.weight_decay)
-            lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
+            lr_func = lambda epoch: (1 - epoch / args.epochs) ** args.lr_power
+            lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_func)
             args.start_epoch = checkpoint['epoch'] + 1
         
 

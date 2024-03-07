@@ -21,9 +21,10 @@ from engine import train_one_epoch, validate
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Set transformer detector', add_help=False)
-    parser.add_argument('--lr', default=1e-4, type=float)
+    parser.add_argument('--lr', default=2e-4, type=float)
     parser.add_argument('--lr_bert', default=1e-5, type=float)
     parser.add_argument('--lr_visu', default=1e-5, type=float)
+    parser.add_argument("--lr_visu_rest", default=1e-4, type=float)
     parser.add_argument('--batch_size', default=8, type=int)
     parser.add_argument('--weight_decay', default=1e-4, type=float)
     parser.add_argument('--epochs', default=90, type=int)
@@ -121,6 +122,7 @@ def main(args):
     model.to(device)
 
     model_without_ddp = model
+    
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
@@ -128,13 +130,15 @@ def main(args):
     print('number of params:', n_parameters)
 
     # visu_cnn_param = [p for n, p in model_without_ddp.named_parameters() if (("visumodel" in n) and ("backbone" in n) and p.requires_grad)]
-    visu_param = [p for n, p in model_without_ddp.named_parameters() if (("visumodel" in n) and p.requires_grad)]
-    text_param = [p for n, p in model_without_ddp.named_parameters() if (("textmodel" in n) and p.requires_grad)]
+    visu_param = [p for n, p in model_without_ddp.visumodel.named_parameters() if (not n.startswith("pm_layer") and not n.startswith("trans_conv") and p.requires_grad)]
+    visu_rest_param = [p for n, p in model_without_ddp.visumodel.named_parameters() if ((n.startswith("pm_layer") or n.startswith("trans_conv")) and p.requires_grad)]
+    text_param = [p for n, p in model_without_ddp.textmodel.named_parameters() if (p.requires_grad)]
     rest_param = [p for n, p in model_without_ddp.named_parameters() if (("visumodel" not in n) and ("textmodel" not in n) and p.requires_grad)]
 
-    param_list = [ 
+    param_list = [  
                     {"params": rest_param, "lr": args.lr},
                     {"params": visu_param, "lr": args.lr_visu},
+                    {"params": visu_rest_param, "lr": args.lr_visu_rest},
                     {"params": text_param, "lr": args.lr_bert}
                  ]
     

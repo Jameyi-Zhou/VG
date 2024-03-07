@@ -713,7 +713,7 @@ class BertModel(BertPreTrainedModel):
         bs = input_ids.shape[0]
         dstl_tokens = self.dstl_token.weight.unsqueeze(0).expand(bs, -1, -1) + \
         self.dstl_pos.weight.unsqueeze(0).expand(bs, -1, -1) 
-        dstl_mask = torch.zeros((bs, 1)).to(input_ids.device).to(torch.bool)
+        dstl_mask = torch.ones((bs, 1)).to(input_ids.device).to(torch.bool)
         attention_mask = torch.cat([attention_mask, dstl_mask], dim=1)
 
         if attention_mask is None:

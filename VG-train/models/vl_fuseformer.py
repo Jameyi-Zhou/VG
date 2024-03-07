@@ -31,10 +31,10 @@ class SparseFuseAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
 
-        self.k_x0_sparse = nn.Linear(1600, 200)
-        self.v_x0_sparse = nn.Linear(1600, 200)
-        self.k_x1_sparse = nn.Linear(400, 200)
-        self.v_x1_sparse = nn.Linear(400, 200)
+        # self.k_x0_sparse = nn.Linear(1600, 200)
+        # self.v_x0_sparse = nn.Linear(1600, 200)
+        # self.k_x1_sparse = nn.Linear(400, 200)
+        # self.v_x1_sparse = nn.Linear(400, 200)
 
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -53,12 +53,9 @@ class SparseFuseAttention(nn.Module):
         
         visu_mask = visu_mask.unsqueeze(1)
         text_mask = text_mask.unsqueeze(1)
-        cls_mask, x0_mask, x1_mask, x2_mask = visu_mask[:, :1, :], visu_mask[:, 1:1601, :], visu_mask[:, 1601:2001, :], visu_mask[:, 2001:2101, :]
+        cls_mask, x0_mask, x1_mask, x2_mask = visu_mask[:, :, :1], visu_mask[:, :, 1:1601], visu_mask[:, :, 1601:2001], visu_mask[:, :, 2001:2101]
 
-        k_x0_spar = self.k_x0_sparse(k_x0.transpose(2, 3)).transpose(2, 3)
-        k_x1_spar = self.k_x1_sparse(k_x1.transpose(2, 3)).transpose(2, 3)
-        v_x0_spar = self.v_x0_sparse(v_x0.transpose(2, 3)).transpose(2, 3)
-        v_x1_spar = self.v_x1_sparse(v_x1.transpose(2, 3)).transpose(2, 3)
+        
 
         # cls forward
         q_cls = q_cls * self.scale
@@ -70,21 +67,30 @@ class SparseFuseAttention(nn.Module):
         
         # x2 forward
         q_x2 = q_x2 * self.scale
-        attn = q_x2 @ torch.cat([k_x0_spar, k_x1_spar, k_x2, k_t], dim=2).transpose(-2, -1)
-        # @TODO:attn_mask 
-        x2 = (attn @ torch.cat([v_x0_spar, v_x1_spar, v_x2, v_t], dim=2)).transpose(1, 2).reshape(B, 100, C)
+        attn = q_x2 @ torch.cat([k_x0, k_x1, k_x2, k_t], dim=2).transpose(-2, -1)
+        # attn_mask
+        attn_mask = torch.cat([x0_mask, x1_mask, x2_mask, text_mask], dim=2).expand(-1, 100, -1)
+        attn = attn.masked_fill(attn_mask.unsqueeze(1), float('-inf'))
+        attn = attn.softmax(dim=-1)
+        x2 = (attn @ torch.cat([v_x0, v_x1, v_x2, v_t], dim=2)).transpose(1, 2).reshape(B, 100, C)
         
         # x1 forward
         q_x1 = q_x1 * self.scale
-        attn = q_x1 @ torch.cat([k_x0_spar, k_x1_spar, k_t], dim=2).transpose(-2, -1)
-        # @TODO:attn_mask 
-        x1 = (attn @ torch.cat([v_x0_spar, v_x1_spar, v_t], dim=2)).transpose(1, 2).reshape(B, 400, C)
+        attn = q_x1 @ torch.cat([k_x0, k_x1, k_t], dim=2).transpose(-2, -1)
+        # attn_mask 
+        attn_mask = torch.cat([x0_mask, x1_mask, text_mask], dim=2).expand(-1, 400, -1)
+        attn = attn.masked_fill(attn_mask.unsqueeze(1), float('-inf'))
+        attn = attn.softmax(dim=-1)
+        x1 = (attn @ torch.cat([v_x0, v_x1, v_t], dim=2)).transpose(1, 2).reshape(B, 400, C)
 
         # x0 forward
         q_x0 = q_x0 * self.scale
-        attn = q_x0 @ torch.cat([k_x0_spar, k_t], dim=2).transpose(-2, -1)
-        # @TODO:attn_mask 
-        x0 = (attn @ torch.cat([v_x0_spar, v_t], dim=2)).transpose(1, 2).reshape(B, 1600, C)
+        attn = q_x0 @ torch.cat([k_x0, k_t], dim=2).transpose(-2, -1)
+        # @attn_mask 
+        attn_mask = torch.cat([x0_mask, text_mask], dim=2).expand(-1, 1600, -1)
+        attn = attn.masked_fill(attn_mask.unsqueeze(1), float('-inf'))
+        attn = attn.softmax(dim=-1)
+        x0 = (attn @ torch.cat([v_x0, v_t], dim=2)).transpose(1, 2).reshape(B, 1600, C)
 
         # t forward
         q_t = q_t * self.scale
@@ -220,7 +226,6 @@ def build_vl_fuseformer(args):
         nhead=args.vl_nheads,
         dim_feedforward=args.vl_dim_feedforward,
         num_encoder_layers=args.vl_enc_layers,
-        num_dual_query_tokens=args.num_dual_query_tokens,
         normalize_before=True,
         activation="gelu"
     )

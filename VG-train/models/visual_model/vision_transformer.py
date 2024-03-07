@@ -49,6 +49,7 @@ from timm.layers import PatchEmbed, Mlp, DropPath, AttentionPoolLatent, RmsNorm,
 from timm.models._builder import build_model_with_cfg
 from timm.models._manipulate import named_apply, checkpoint_seq, adapt_input_conv
 from timm.models._registry import generate_default_cfgs, register_model, register_model_deprecations
+from flash_attn import flash_attn_qkvpacked_func, flash_attn_func
 
 __all__ = ['VisionTransformer']  # model_registry will add each entrypoint fn to this
 
@@ -122,7 +123,7 @@ class Block(nn.Module):
             mlp_ratio: float = 4.,
             qkv_bias: bool = False,
             qk_norm: bool = False,
-            proj_drop: float = 0.,
+            proj_drop: float = 0.1,
             attn_drop: float = 0.,
             init_values: Optional[float] = None,
             drop_path: float = 0.,

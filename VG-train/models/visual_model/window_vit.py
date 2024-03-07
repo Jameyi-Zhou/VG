@@ -45,14 +45,6 @@ from torchvision.models import vit_b_16, ViT_B_16_Weights
 
 
 class PatchMerging(nn.Module):
-    r""" Patch Merging Layer.
-
-    Args:
-        input_resolution (tuple[int]): Resolution of input feature.
-        dim (int): Number of input channels.
-        norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
-    """
-
     def __init__(self, dim, num_extra_tokens, norm_layer=nn.LayerNorm):
         super().__init__()
         self.dim = dim
@@ -100,11 +92,13 @@ class FusionViT(VisionTransformer):
         self.shuffle = shuffle
         self.num_patches = self.patch_embed.num_patches
         
-        self.pm_layer1 = PatchMerging(dim=self.embed_dim, num_extra_tokens=self.num_prefix_tokens+self.num_suffix_tokens)
-        self.pm_layer2 = PatchMerging(dim=self.embed_dim, num_extra_tokens=self.num_prefix_tokens+self.num_suffix_tokens)
-        self.resample0 = nn.Conv2d(self.embed_dim, self.embed_dim, kernel_size=(1, 1))
-        self.resample1 = nn.Conv2d(self.embed_dim, self.embed_dim, kernel_size=(1, 1))
-        self.resample2 = nn.Conv2d(self.embed_dim, self.embed_dim, kernel_size=(1, 1))
+        # self.pm_layer1 = PatchMerging(dim=self.embed_dim, num_extra_tokens=self.num_prefix_tokens+self.num_suffix_tokens)
+        # self.pm_layer2 = PatchMerging(dim=self.embed_dim, num_extra_tokens=self.num_prefix_tokens+self.num_suffix_tokens)
+        # self.resample0 = nn.Conv2d(self.embed_dim, self.embed_dim, kernel_size=(1, 1))
+        # self.resample1 = nn.Conv2d(self.embed_dim, self.embed_dim, kernel_size=(1, 1))
+        # self.resample2 = nn.Conv2d(self.embed_dim, self.embed_dim, kernel_size=(1, 1))
+        # self.trans_conv1 = nn.ConvTranspose2d(in_channels=768, out_channels=768, kernel_size=4, stride=2, padding=1)
+        # self.trans_conv2 = nn.ConvTranspose2d(in_channels=768, out_channels=768, kernel_size=4, stride=2, padding=1)
         self._reset_parameters()
         
         del self.norm
@@ -246,7 +240,7 @@ class FusionViT(VisionTransformer):
         cls_mask = torch.zeros((bs, 1)).to(x.device).to(torch.bool)
         dstl_mask = torch.zeros((bs, 1)).to(x.device).to(torch.bool)        
         mask = torch.cat([cls_mask, mask, dstl_mask], dim=1)
-
+        # import pdb;pdb.set_trace()
         output_x = []
         output_mask = []
         # x[bs, 402, 768], mask[bs, 402]
@@ -263,7 +257,7 @@ class FusionViT(VisionTransformer):
                     x, mask, attn = self.normal_window_forward(i, x, mask)
             output_x.append(x[:, 1:-1, :])
             output_mask.append(mask[:, 1:-1])
-            x, mask = self.pm_layer1(x, mask)  # patch merging
+            # x, mask = self.pm_layer1(x, mask)  # patch merging
 
             
             if self.train() and self.shuffle:
@@ -284,27 +278,38 @@ class FusionViT(VisionTransformer):
             cls_mask, dstl_mask = mask[:, :1], mask[:, -1:]
             output_x.append(x[:, 1:-1, :])
             output_mask.append(mask[:, 1:-1])
-            f_size0 = f_size
-            f_size1 = f_size0 // 2
-            f_size2 = f_size1 // 2
-            x2 = output_x[2].view(bs, f_size2, f_size2, -1).permute(0, 3, 1, 2)
-            x1 = output_x[1].view(bs, f_size1, f_size1, -1).permute(0, 3, 1, 2)
-            x0 = output_x[0].view(bs, f_size0, f_size0, -1).permute(0, 3, 1, 2)
+            
             '''
-            ' @TODO: ablation study 使用卷积上采样
+            ' @ablation study 使用反卷积上采样
             '''
-            # 双三次插值上采样
-            x2 = self.resample2(x2) + x2
-            x2_unsample = torch.nn.functional.interpolate(x2, size=(f_size1, f_size1), mode='bicubic', align_corners=False)
-            x1 = self.resample1(x1) + x2_unsample
-            x1_unsample = torch.nn.functional.interpolate(x1, size=(f_size0, f_size0), mode='bicubic', align_corners=False)
-            x0 = self.resample0(x0) + x1_unsample
-            # concat
-            x2 = x2.permute(0, 2, 3, 1).view(bs, f_size2*f_size2, -1)
-            x1 = x1.permute(0, 2, 3, 1).view(bs, f_size1*f_size1, -1)
-            x0 = x0.permute(0, 2, 3, 1).view(bs, f_size0*f_size0, -1)
-            x_list = [cls_tokens, x0, x1, x2, dstl_tokens]
-            mask_list = [cls_mask, output_mask[0], output_mask[1], output_mask[2], dstl_mask]
+            # f_size0 = f_size
+            # f_size1 = f_size0 // 2
+            # f_size2 = f_size1 // 2
+            # x2 = output_x[2].view(bs, f_size2, f_size2, -1).permute(0, 3, 1, 2)
+            # x1 = output_x[1].view(bs, f_size1, f_size1, -1).permute(0, 3, 1, 2)
+            # x0 = output_x[0].view(bs, f_size0, f_size0, -1).permute(0, 3, 1, 2)
+            # x2 = x2
+            # x2_unsample = self.trans_conv1(x2)
+            # x1 = x1 + x2_unsample
+            # x1_unsample = self.trans_conv1(x1)
+            # x0 = x0 + x1_unsample
+            '''
+            ' @ablation study 使用双三次插值上采样
+            '''
+            # x2 = x2
+            # x2_unsample = torch.nn.functional.interpolate(x2, size=(f_size1, f_size1), mode='bicubic', align_corners=False)
+            # x1 = x1 + x2_unsample
+            # x1_unsample = torch.nn.functional.interpolate(x1, size=(f_size0, f_size0), mode='bicubic', align_corners=False)
+            # x0 = x0 + x1_unsample
+            
+            '''
+            ' concat
+            '''
+            # x2 = x2.permute(0, 2, 3, 1).view(bs, f_size2*f_size2, -1)
+            # x1 = x1.permute(0, 2, 3, 1).view(bs, f_size1*f_size1, -1)
+            # x0 = x0.permute(0, 2, 3, 1).view(bs, f_size0*f_size0, -1)
+            # x_list = [cls_tokens, x0, x1, x2, dstl_tokens]
+            # mask_list = [cls_mask, output_mask[0], output_mask[1], output_mask[2], dstl_mask]
             return x_list, mask_list
         else:
             for i in range(0, 12):

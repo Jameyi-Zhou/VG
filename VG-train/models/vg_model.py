@@ -7,6 +7,7 @@ from .language_model.model_bert import build_bert
 from .vl_fuseformer import build_vl_fuseformer
 from .language_model.model_roberta import build_roberta
 from utils.box_utils import xywh2xyxy
+import time
 
 
 class VGModel(nn.Module):
@@ -62,14 +63,21 @@ class VGModel(nn.Module):
 
     def forward(self, img_data, text_data):
         bs = img_data.tensors.shape[0]
-        
+
         # language branch
+        start_t = time.time_ns() / 1000000
         text_src, text_mask = self.textmodel(text_data)  # (bs, 22(42), 768)
+        end_t = time.time_ns() / 1000000
+        time_t = end_t - start_t
         text_src = self.text_proj(text_src)
+        
         text_tokens = self.text_tokens_with_pos_embed(text_src)
         text_mask = text_mask[:, 1:]
         # visual branch
+        start_v = time.time_ns() / 1000000
         visu_src_list, visu_mask_list = self.visumodel(img_data)  # (bs, 2102, 768)
+        end_v = time.time_ns() / 1000000
+        time_v = end_v - start_v
         for i in range(len(visu_src_list)):
             visu_src_list[i] = self.visu_proj(visu_src_list[i])
         cls_tokens, visu_tokens = self.visu_tokens_with_pos_embed(visu_src_list)
@@ -81,10 +89,13 @@ class VGModel(nn.Module):
         # vl_mask = torch.cat([cls_mask, mask2, text_mask], dim=1)
         # vg_hs = self.vl_fuseformer(vl_src, vl_mask)[0]
         ####
-        
+        start_f = time.time_ns() / 1000000
         vg_hs = self.vl_fuseformer(cls_tokens, visu_tokens, text_tokens, visu_mask, text_mask)  # fusion
+        end_f = time.time_ns() / 1000000
+        time_f = end_f - start_f
+        # print("text: {}, vision: {}, fusion: {}".format(time_t, time_v, time_f))
         vg_hs = vg_hs.permute(1, 0, 2)[0]
-
+        import pdb;pdb.set_trace()
         pred_box = self.bbox_embed(vg_hs).sigmoid()
         return pred_box
 

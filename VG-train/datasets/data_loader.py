@@ -146,7 +146,11 @@ class TransVGDataset(data.Dataset):
             'params': {'dataset': 'refcocog', 'split_by': 'umd'}
         },
         'flickr': {
-            'splits': ('train', 'val', 'test')}
+            'splits': ('train', 'val', 'test')
+        },
+        'itr': {
+            'splits': ('train', 'val')
+        }
     }
 
     def __init__(self, data_root, split_root='data', dataset='referit',  
@@ -185,7 +189,7 @@ class TransVGDataset(data.Dataset):
             self.im_dir = osp.join(
                 self.dataset_root, 'images', 'mscoco', 'images', 'train2014')
             self.split_dir = osp.join(self.dataset_root, 'splits')
-
+        
         if not self.exists_dataset():
             # self.process_dataset()
             print('Please download index cache to data folder: \n \

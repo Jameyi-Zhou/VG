@@ -1,3 +1,3 @@
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5
-python train.py --batch_size 8 --use_mae --aug_crop --aug_scale --aug_translate --dataset unc --max_query_len 21 --output_dir outputs/refcoco_test --epoch 1 --imsize 640
-# python -m torch.distributed.launch --nproc_per_node=6 --use_env train.py --batch_size 8 --use_mae --aug_scale --aug_translate --dataset unc --max_query_len 21 --output_dir outputs/refcoco_sfa --lr_scheduler poly --epoch 60 --imsize 640
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+# python train.py --batch_size 2 --use_mae --aug_crop --aug_scale --aug_translate --dataset unc --max_query_len 21 --output_dir outputs/refcoco_test --epoch 1 --imsize 640
+python -m torch.distributed.launch --nproc_per_node=8 --use_env train.py --batch_size 2 --use_mae --aug_scale --aug_translate --dataset unc --max_query_len 21 --output_dir outputs/refcoco_ms --lr_scheduler poly --epoch 60 --imsize 640

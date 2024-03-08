@@ -95,7 +95,7 @@ class VGModel(nn.Module):
         time_f = end_f - start_f
         # print("text: {}, vision: {}, fusion: {}".format(time_t, time_v, time_f))
         vg_hs = vg_hs.permute(1, 0, 2)[0]
-        import pdb;pdb.set_trace()
+        
         pred_box = self.bbox_embed(vg_hs).sigmoid()
         return pred_box
 
